@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 )
 
 func APIKeyAuth(validKeys []string) func(http.Handler) http.Handler {
@@ -13,19 +12,13 @@ func APIKeyAuth(validKeys []string) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, `{"error":"missing authorization header"}`, http.StatusUnauthorized)
+			key := r.Header.Get("X-API-Key")
+			if key == "" {
+				http.Error(w, `{"error":"missing X-API-Key header"}`, http.StatusUnauthorized)
 				return
 			}
 
-			token := strings.TrimPrefix(authHeader, "Bearer ")
-			if token == authHeader {
-				http.Error(w, `{"error":"invalid authorization format, expected Bearer token"}`, http.StatusUnauthorized)
-				return
-			}
-
-			if _, ok := keySet[token]; !ok {
+			if _, ok := keySet[key]; !ok {
 				http.Error(w, `{"error":"invalid api key"}`, http.StatusUnauthorized)
 				return
 			}

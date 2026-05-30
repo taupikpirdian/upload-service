@@ -21,26 +21,36 @@ func NewUploadHandler(uploadBackup usecase.UploadBackup) *UploadHandler {
 }
 
 func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	filename := r.URL.Query().Get("filename")
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, `{"error":"invalid multipart form"}`, http.StatusBadRequest)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, `{"error":"missing form file 'file'"}`, http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	filename := fileHeader.Filename
 	if filename == "" {
 		filename = fmt.Sprintf("backup-%s.sql.gz", time.Now().UTC().Format("20060102-150405"))
 	}
 
-	contentType := r.Header.Get("Content-Type")
+	contentType := fileHeader.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	contentLength := r.ContentLength
-
 	slog.Info("receiving upload",
 		"filename", filename,
 		"content_type", contentType,
-		"content_length", contentLength,
+		"size", fileHeader.Size,
 		"remote_addr", r.RemoteAddr,
 	)
 
-	resp, err := h.uploadBackup.Execute(r.Context(), filename, r.Body, contentLength, contentType)
+	resp, err := h.uploadBackup.Execute(r.Context(), filename, file, fileHeader.Size, contentType)
 	if err != nil {
 		slog.Error("upload failed", "error", err)
 		http.Error(w, `{"error":"upload failed"}`, http.StatusInternalServerError)
